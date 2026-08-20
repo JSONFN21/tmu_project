@@ -424,43 +424,23 @@ def render_service_detail() -> None:
 
 
 def render_operations() -> None:
-    left, right = st.columns([1.15, 1])
-    with left:
-        with st.container(border=True):
-            title_block("Assignment-group workload", "How selected incidents are distributed across support groups")
-            workload = (
-                filtered.groupby("assignment_group", as_index=False).size().rename(columns={"size": "incidents"})
-                .sort_values("incidents", ascending=True)
-            )
-            workload_chart = px.bar(
-                workload, x="incidents", y="assignment_group", orientation="h", color="assignment_group",
-                color_discrete_sequence=PALETTE, labels={"incidents": "Incidents", "assignment_group": ""},
-            )
-            workload_chart.update_traces(hovertemplate="<b>%{y}</b><br>%{x:,} incidents<extra></extra>")
-            workload_chart.update_layout(showlegend=False)
-            st.plotly_chart(style_figure(workload_chart), width="stretch", config={"displayModeBar": False})
-    with right:
-        with st.container(border=True):
-            title_block("Data completeness", "Required reporting fields present in the selected incidents")
-            quality_rows = pd.DataFrame(
-                {
-                    "Check": ["Incident number", "Business Service", "Assignment group", "Created date"],
-                    "Complete": [
-                        filtered["number"].notna().mean(),
-                        filtered["business_service"].ne("Unspecified").mean(),
-                        filtered["assignment_group"].ne("Unspecified").mean(),
-                        filtered["sys_created_on"].notna().mean(),
-                    ],
-                }
-            )
-            quality = px.bar(
-                quality_rows, x="Complete", y="Check", orientation="h", range_x=[0, 1], color="Check",
-                color_discrete_sequence=PALETTE,
-            )
-            quality.update_xaxes(tickformat=".0%")
-            quality.update_traces(hovertemplate="<b>%{y}</b><br>%{x:.1%} complete<extra></extra>")
-            quality.update_layout(showlegend=False)
-            st.plotly_chart(style_figure(quality), width="stretch", config={"displayModeBar": False})
+    with st.container(border=True):
+        title_block("Assignment-group workload", "How selected incidents are distributed across support groups")
+        workload = (
+            filtered.groupby("assignment_group", as_index=False).size().rename(columns={"size": "incidents"})
+            .sort_values("incidents", ascending=True)
+        )
+        workload_chart = px.bar(
+            workload, x="incidents", y="assignment_group", orientation="h", color="assignment_group",
+            color_discrete_sequence=PALETTE, labels={"incidents": "Incidents", "assignment_group": ""},
+        )
+        workload_chart.update_traces(hovertemplate="<b>%{y}</b><br>%{x:,} incidents<extra></extra>")
+        workload_chart.update_layout(showlegend=False)
+        st.plotly_chart(
+            style_figure(workload_chart, height=520),
+            width="stretch",
+            config={"displayModeBar": False},
+        )
 
     with st.expander("View incident records"):
         st.caption(

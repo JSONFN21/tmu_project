@@ -67,7 +67,8 @@ def test_servicenow_dashboard_renders_from_snapshot(tmp_path):
     app.session_state["dashboard_tab"] = "Operations"
     app.run()
     assert not app.exception
-    assert len(app.get("plotly_chart")) == 2
+    assert len(app.get("plotly_chart")) == 1
+    assert not any("Data completeness" in item.value for item in app.markdown)
     prepare = next(button for button in app.button if button.label == "Prepare filtered CSV")
     prepare.click()
     app.session_state["dashboard_tab"] = "Operations"
