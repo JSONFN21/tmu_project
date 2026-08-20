@@ -5,8 +5,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PORT=8080
 
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt requirements-bigquery.txt ./
+RUN pip install --no-cache-dir -r requirements-bigquery.txt
 COPY app.py analytics.py bigquery_store.py servicenow.py sync_servicenow_to_bigquery.py ./
 COPY .streamlit/config.toml ./.streamlit/config.toml
 

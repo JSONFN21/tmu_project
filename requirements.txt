@@ -3,5 +3,3 @@ pandas==2.3.3
 plotly==6.9.0
 requests==2.34.2
 pyarrow==24.0.0
-google-cloud-bigquery==3.43.0
-db-dtypes==1.7.1

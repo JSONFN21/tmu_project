@@ -11,7 +11,14 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from analytics import filter_incidents, monthly_counts, monthly_service_counts, normalize_incidents, resolved_mask
+from analytics import (
+    CANONICAL_COLUMNS,
+    filter_incidents,
+    monthly_counts,
+    monthly_service_counts,
+    normalize_incidents,
+    resolved_mask,
+)
 from bigquery_store import BigQueryStoreError, SnapshotInfo, load_snapshot
 from servicenow import DEFAULT_ENDPOINT, ServiceNowError, fetch_incidents
 
@@ -68,14 +75,29 @@ st.markdown(
         min-height: 150px;
     }
     [data-testid="stMetricLabel"] { color: #9AA8BE; }
-    [data-testid="stMetricValue"] { color: #F8FAFC; font-weight: 760; }
-    [data-testid="stMetricValue"] > div {
+    [data-testid="stMetricValue"] {
+        color: #F8FAFC;
+        font-weight: 760;
+        width: 100%;
+        min-width: 0;
+        overflow: visible !important;
+    }
+    [data-testid="stMetricValue"] > div,
+    [data-testid="stMetricValue"] p {
         font-size: clamp(1.55rem, 2.15vw, 2.65rem);
         line-height: 1.05;
-        white-space: normal;
-        overflow: visible;
-        text-overflow: clip;
-        overflow-wrap: anywhere;
+        white-space: normal !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        overflow-wrap: anywhere !important;
+        word-break: normal !important;
+        max-width: 100% !important;
+    }
+    [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(4)
+    [data-testid="stMetricValue"] > div,
+    [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:nth-child(4)
+    [data-testid="stMetricValue"] p {
+        font-size: clamp(1.4rem, 1.8vw, 2.2rem);
     }
     [data-testid="stVerticalBlockBorderWrapper"] {
         background: #0D1828;
@@ -131,11 +153,17 @@ def fetch_from_servicenow(username: str, password: str, endpoint: str) -> pd.Dat
     return normalize_incidents(fetch_incidents(username, password, endpoint=endpoint))
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_resource(show_spinner=False)
 def load_local_cache(path: str, modified_ns: int) -> pd.DataFrame:
-    """Load a validated local snapshot; modified_ns invalidates Streamlit's memory cache."""
+    """Load one shared snapshot; modified_ns invalidates it after a refresh."""
     del modified_ns
-    return normalize_incidents(pd.read_parquet(path))
+    frame = pd.read_parquet(path)
+    if list(frame.columns) == CANONICAL_COLUMNS and all(
+        pd.api.types.is_datetime64_ns_dtype(frame[column])
+        for column in ("sys_created_on", "resolved_at", "closed_at")
+    ):
+        return frame
+    return normalize_incidents(frame)
 
 
 def save_local_cache(frame: pd.DataFrame) -> None:
@@ -155,7 +183,7 @@ def cached_incidents() -> pd.DataFrame:
     return load_local_cache(str(DATA_CACHE), DATA_CACHE.stat().st_mtime_ns)
 
 
-@st.cache_data(show_spinner=False, ttl=300)
+@st.cache_resource(show_spinner=False, ttl=300)
 def load_bigquery_cache(
     project: str, dataset: str, table: str
 ) -> tuple[pd.DataFrame, SnapshotInfo]:
@@ -292,7 +320,8 @@ if not services or not groups:
     st.stop()
 
 filtered = filter_incidents(incidents, date_range[0], date_range[1], services)
-filtered = filtered[filtered["assignment_group"].isin(groups)].copy()
+if len(groups) != len(all_groups):
+    filtered = filtered[filtered["assignment_group"].isin(groups)].copy()
 if filtered.empty:
     st.warning("No incidents match the selected date, service, and assignment-group filters.")
     st.stop()
@@ -302,7 +331,8 @@ period_days = (period_end - period_start).days + 1
 previous_end = period_start - pd.offsets.Day(1)
 previous_start = previous_end - pd.offsets.Day(period_days - 1)
 previous = filter_incidents(incidents, previous_start, previous_end, services)
-previous = previous[previous["assignment_group"].isin(groups)]
+if len(groups) != len(all_groups):
+    previous = previous[previous["assignment_group"].isin(groups)]
 delta = len(filtered) - len(previous) if not previous.empty else None
 monthly = monthly_counts(filtered)
 top_service = filtered["business_service"].value_counts().index[0]
@@ -317,9 +347,7 @@ kpi3.metric("Resolution rate", f"{resolution_rate:.1%}")
 kpi4.metric("Top Business Service", top_service)
 kpi5.metric("Peak month", pd.Timestamp(peak_row["month"]).strftime("%b %Y"), f"{int(peak_row['incidents']):,} incidents")
 
-trend_tab, service_tab, operations_tab = st.tabs(["Overview", "Service detail", "Operations"])
-
-with trend_tab:
+def render_overview() -> None:
     left, right = st.columns([1.35, 1])
     with left:
         with st.container(border=True):
@@ -335,32 +363,20 @@ with trend_tab:
         with st.container(border=True):
             title_block("Incident status", "Current state of incidents in the selected period")
             status_totals = filtered.groupby("state", as_index=False).size().rename(columns={"size": "incidents"})
-            donut = px.pie(
-                status_totals, names="state", values="incidents", hole=.68,
-                color_discrete_sequence=PALETTE,
-            )
+            donut = px.pie(status_totals, names="state", values="incidents", hole=.68, color_discrete_sequence=PALETTE)
             donut.update_traces(
-                textposition="none",
-                domain=dict(x=[0.08, 0.92], y=[0.28, 1]),
+                textposition="none", domain=dict(x=[0.08, 0.92], y=[0.28, 1]),
                 hovertemplate="%{label}<br><b>%{value:,}</b> • %{percent}<extra></extra>",
             )
             donut.add_annotation(
-                x=0.5,
-                y=0.64,
-                xref="paper",
-                yref="paper",
+                x=0.5, y=0.64, xref="paper", yref="paper",
                 text=f"<b>{resolved_count:,}</b><br><span style='font-size:11px'>resolved</span>",
-                showarrow=False,
-                font_color="#F8FAFC",
+                showarrow=False, font_color="#F8FAFC",
             )
             donut = style_figure(donut, height=420)
             donut.update_layout(
                 legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=0.14,
-                    xanchor="center",
-                    x=0.5,
+                    orientation="h", yanchor="top", y=0.14, xanchor="center", x=0.5,
                     font=dict(size=11),
                 ),
                 margin=dict(l=10, r=10, t=18, b=18),
@@ -378,7 +394,8 @@ with trend_tab:
         service_mix.update_traces(marker_line_width=0, hovertemplate="%{x|%B %Y}<br><b>%{y:,} incidents</b><extra>%{fullData.name}</extra>")
         st.plotly_chart(style_figure(service_mix, height=420), width="stretch", config={"displayModeBar": False})
 
-with service_tab:
+
+def render_service_detail() -> None:
     with st.container(border=True):
         title_block("Business Service ranking", "Total incident volume and share of the selected period")
         ranking = (
@@ -397,7 +414,7 @@ with service_tab:
         st.plotly_chart(style_figure(bars, height=430), width="stretch", config={"displayModeBar": False})
 
     st.dataframe(
-        ranking.sort_values("incidents", ascending=False), hide_index=True, width="stretch",
+        ranking, hide_index=True, width="stretch",
         column_config={
             "business_service": st.column_config.TextColumn("Business Service"),
             "incidents": st.column_config.NumberColumn("Incidents", format="localized"),
@@ -405,7 +422,8 @@ with service_tab:
         },
     )
 
-with operations_tab:
+
+def render_operations() -> None:
     left, right = st.columns([1.15, 1])
     with left:
         with st.container(border=True):
@@ -451,9 +469,8 @@ with operations_tab:
         )
         display = filtered.head(1_000).rename(
             columns={
-                "number": "Incident",
-                "assignment_group": "Assignment group", "sys_created_on": "Created",
-                "business_service": "Business Service",
+                "number": "Incident", "assignment_group": "Assignment group",
+                "sys_created_on": "Created", "business_service": "Business Service",
                 "state": "State", "resolved_at": "Resolved", "closed_at": "Closed", "active": "Active",
             }
         )
@@ -465,6 +482,20 @@ with operations_tab:
                 file_name=f"bst_incidents_{date_range[0]}_{date_range[1]}.csv", mime="text/csv",
                 on_click="ignore",
             )
+
+
+trend_tab, service_tab, operations_tab = st.tabs(
+    ["Overview", "Service detail", "Operations"], key="dashboard_tab", on_change="rerun"
+)
+if trend_tab.open:
+    with trend_tab:
+        render_overview()
+elif service_tab.open:
+    with service_tab:
+        render_service_detail()
+elif operations_tab.open:
+    with operations_tab:
+        render_operations()
 
 st.markdown(
     '<div class="footer">CCS Business Service Trends • Secure internal reporting • Built with Streamlit</div>',

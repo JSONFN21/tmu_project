@@ -41,7 +41,8 @@ def normalize_incidents(records: list[dict] | pd.DataFrame) -> pd.DataFrame:
     for column in CANONICAL_COLUMNS:
         if column not in frame:
             frame[column] = pd.NA
-        frame[column] = frame[column].map(_display_value)
+        if any(isinstance(value, dict) for value in frame[column].array[:1_000]):
+            frame[column] = frame[column].map(_display_value)
 
     frame = frame[CANONICAL_COLUMNS]
     for column in ["sys_created_on", "resolved_at", "closed_at"]:
@@ -54,9 +55,8 @@ def normalize_incidents(records: list[dict] | pd.DataFrame) -> pd.DataFrame:
         frame["assignment_group"].fillna("Unspecified").replace("", "Unspecified")
     )
     frame["state"] = frame["state"].fillna("Unspecified").replace("", "Unspecified")
-    frame["active"] = frame["active"].map(
-        lambda value: pd.NA if pd.isna(value) or value == "" else str(value).strip().lower() == "true"
-    ).astype("boolean")
+    active_text = frame["active"].astype("string").str.strip().str.casefold()
+    frame["active"] = active_text.eq("true").where(active_text.ne(""), pd.NA).astype("boolean")
     frame = frame.drop_duplicates(subset=["number"], keep="last")
     return frame.sort_values("sys_created_on", ascending=False).reset_index(drop=True)
 

@@ -61,10 +61,17 @@ def test_servicenow_dashboard_renders_from_snapshot(tmp_path):
     ]
     assert app.metric[3].value == "Two Factor Authentication (2FA)"
     assert [tab.label for tab in app.tabs] == ["Overview", "Service detail", "Operations"]
-    assert len(app.get("plotly_chart")) == 6
+    assert len(app.get("plotly_chart")) == 3
+    assert any("white-space: normal !important" in item.value for item in app.markdown)
 
+    app.session_state["dashboard_tab"] = "Operations"
+    app.run()
+    assert not app.exception
+    assert len(app.get("plotly_chart")) == 2
     prepare = next(button for button in app.button if button.label == "Prepare filtered CSV")
-    prepare.click().run()
+    prepare.click()
+    app.session_state["dashboard_tab"] = "Operations"
+    app.run()
     assert not app.exception
     assert len(app.get("download_button")) == 1
 
