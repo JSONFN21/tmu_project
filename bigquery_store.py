@@ -50,7 +50,7 @@ def table_id(project: str, dataset: str, table: str) -> str:
 def _client(project: str) -> Any:
     if bigquery is None:
         raise BigQueryStoreError(
-            "BigQuery support is not installed. Install the packages in requirements.txt."
+            "BigQuery support is not installed. Install requirements-bigquery.txt."
         )
     return bigquery.Client(project=project)
 

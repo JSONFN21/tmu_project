@@ -39,7 +39,7 @@ def fetch_incidents(
     username: str,
     password: str,
     endpoint: str = DEFAULT_ENDPOINT,
-    page_size: int = 5_000,
+    page_size: int = 10_000,
     timeout: int = 60,
     progress: Callable[[int], None] | None = None,
 ) -> list[dict]:
